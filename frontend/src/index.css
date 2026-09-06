@@ -1,0 +1,276 @@
+/*
+  Design concept: a script supervisor's continuity binder rendered as a
+  living dashboard. Charcoal "binder cover" background, parchment report
+  cards, and typewriter-style scene labels (Plex Mono) evoke marked-up
+  script pages, while Plex Sans carries the interface chrome.
+*/
+
+:root {
+  --charcoal: #1a1815;
+  --charcoal-raised: #232019;
+  --parchment: #ede8dd;
+  --parchment-dim: #d9d2c1;
+  --ink: #2b2620;
+  --rule: #4a463f;
+  --rule-light: #55503f55;
+  --risk-low: #4c7a5d;
+  --risk-medium: #c98a3b;
+  --risk-high: #b33b3b;
+  --accent: #c98a3b;
+
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-sans: "IBM Plex Sans", -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--charcoal);
+  color: var(--parchment);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+
+@media (max-width: 760px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .scene-rail { display: none; }
+}
+
+/* --- Left rail: scene binder --- */
+.scene-rail {
+  background: var(--charcoal-raised);
+  border-right: 1px solid var(--rule);
+  padding: 24px 0;
+}
+
+.rail-title {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--parchment-dim);
+  padding: 0 20px 16px;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 8px;
+}
+
+.scene-tab {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  color: var(--parchment-dim);
+  padding: 10px 20px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.scene-tab:hover { background: #2c2820; }
+
+.scene-tab.active {
+  border-left-color: var(--accent);
+  color: var(--parchment);
+  background: #2c2820;
+}
+
+.risk-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+.risk-dot.LOW { background: var(--risk-low); }
+.risk-dot.MEDIUM { background: var(--risk-medium); }
+.risk-dot.HIGH { background: var(--risk-high); }
+
+/* --- Main column --- */
+.main-column {
+  padding: 32px 40px 60px;
+  max-width: 920px;
+}
+
+.masthead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 20px;
+  margin-bottom: 28px;
+}
+
+.masthead h1 {
+  font-size: 26px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--parchment);
+}
+
+.masthead .subtitle {
+  font-size: 13px;
+  color: var(--parchment-dim);
+  margin-top: 4px;
+}
+
+.status-gauge {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: right;
+  padding: 8px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
+
+.status-gauge .value.LOW { color: var(--risk-low); }
+.status-gauge .value.MEDIUM { color: var(--risk-medium); }
+.status-gauge .value.HIGH { color: var(--risk-high); }
+
+/* --- Upload panel --- */
+.upload-panel textarea {
+  width: 100%;
+  min-height: 180px;
+  background: var(--charcoal-raised);
+  color: var(--parchment);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 14px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.upload-panel .row {
+  display: flex;
+  gap: 12px;
+  margin-top: 14px;
+  align-items: center;
+}
+
+.upload-panel input[type="date"] {
+  background: var(--charcoal-raised);
+  color: var(--parchment);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+button.primary {
+  background: var(--accent);
+  color: var(--charcoal);
+  border: none;
+  border-radius: 3px;
+  padding: 10px 20px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+button.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.ghost {
+  background: none;
+  border: 1px solid var(--rule);
+  color: var(--parchment-dim);
+  border-radius: 3px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* --- Continuity report card --- */
+.report-card {
+  background: var(--parchment);
+  color: var(--ink);
+  border-radius: 4px;
+  padding: 28px 32px;
+  margin-top: 20px;
+}
+
+.report-card h2 {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  margin: 0 0 4px;
+}
+
+.report-card .risk-banner {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 3px;
+  color: #fff;
+  margin-bottom: 18px;
+}
+.risk-banner.LOW { background: var(--risk-low); }
+.risk-banner.MEDIUM { background: var(--risk-medium); }
+.risk-banner.HIGH { background: var(--risk-high); }
+
+.report-section {
+  border-top: 1px solid #cbc3ae;
+  padding: 16px 0;
+}
+
+.report-section:first-of-type { border-top: none; }
+
+.report-section h3 {
+  font-size: 12px;
+  text-transform: none;
+  color: #6b6250;
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.report-section p, .report-section li {
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0 0 4px;
+}
+
+.report-section ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.field-row {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.field {
+  min-width: 140px;
+}
+
+.field .label {
+  font-size: 11px;
+  color: #857a5f;
+  margin-bottom: 2px;
+}
+
+.field .value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.empty-state {
+  color: var(--parchment-dim);
+  font-size: 14px;
+  padding: 40px 0;
+}

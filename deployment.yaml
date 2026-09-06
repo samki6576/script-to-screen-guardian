@@ -1,0 +1,54 @@
+# Google Cloud Run service definition for the backend.
+# Deploy with:
+#   gcloud run services replace deployment.yaml --region=us-central1
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: script-to-screen-guardian
+  labels:
+    cloud.googleapis.com/location: us-central1
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "5"
+    spec:
+      containerConcurrency: 20
+      timeoutSeconds: 60
+      containers:
+        - image: gcr.io/PROJECT_ID/script-to-screen-guardian:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: GOOGLE_CLOUD_PROJECT
+              value: PROJECT_ID
+            - name: GEMINI_MODEL
+              value: gemini-1.5-pro
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gemini-api-key
+                  key: latest
+            - name: CLICKHOUSE_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-host
+                  key: latest
+            - name: CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-user
+                  key: latest
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-password
+                  key: latest
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+  traffic:
+    - percent: 100
+      latestRevision: true
