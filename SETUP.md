@@ -55,6 +55,10 @@ GEMINI_MODEL = "gemini-1.5-pro"
 
 4. Deploy. Streamlit Cloud installs `requirements.txt` automatically.
 
+The repository includes `runtime.txt` to pin Streamlit Cloud to Python 3.12.
+This is required because the older pinned dependencies do not provide wheels
+for Python 3.14.
+
 ClickHouse settings can be added to the same Secrets section when remote
 history persistence is needed:
 
