@@ -37,7 +37,39 @@ deterministic offline mode so the pipeline still produces a full demo, but
 Gemini's reasoning materially improves scene extraction and recommendation
 quality, so set a real key before the hackathon demo.
 
-## 3. Run everything with Docker Compose (recommended for the demo)
+## 3. Deploy the Streamlit app
+
+The repository includes `streamlit_app.py`, which runs the existing
+orchestrator directly and does not require the FastAPI or React services.
+
+### Streamlit Cloud
+
+1. Create a new app from this repository.
+2. Set the main file to `streamlit_app.py`.
+3. In the app's **Settings > Secrets**, add:
+
+```toml
+GEMINI_API_KEY = "your-api-key"
+GEMINI_MODEL = "gemini-1.5-pro"
+```
+
+4. Deploy. Streamlit Cloud installs `requirements.txt` automatically.
+
+ClickHouse settings can be added to the same Secrets section when remote
+history persistence is needed:
+
+```toml
+CLICKHOUSE_HOST = "your-clickhouse-host"
+CLICKHOUSE_PORT = "8123"
+CLICKHOUSE_DATABASE = "production_db"
+CLICKHOUSE_USER = "default"
+CLICKHOUSE_PASSWORD = "your-password"
+```
+
+The app also works without Gemini credentials by using the deterministic
+fallback responses built into the agents.
+
+## 4. Run everything with Docker Compose (recommended for the demo)
 
 ```bash
 docker compose up --build
@@ -50,7 +82,7 @@ This starts:
 - The React frontend on `localhost:3000`
 - Grafana on `localhost:3001` (default login `admin` / `admin`)
 
-## 4. Run components individually (development)
+## 5. Run components individually (development)
 
 ### Backend
 
@@ -76,7 +108,7 @@ npm install
 npm start
 ```
 
-## 5. Wiring Grafana to ClickHouse
+## 6. Wiring Grafana to ClickHouse
 
 1. Open Grafana at `localhost:3001`.
 2. Add a data source → ClickHouse (install the ClickHouse plugin if not
@@ -85,7 +117,7 @@ npm start
 3. Build a panel over `risk_reports` (risk level over time) and
    `equipment_inventory` (current availability) for a production-wide view.
 
-## 6. Deploying to Google Cloud Run
+## 7. Deploying to Google Cloud Run
 
 ```bash
 # Build and push the backend image
@@ -104,7 +136,7 @@ gcloud run services replace deployment.yaml --region=us-central1
 Point the frontend's `REACT_APP_API_URL` at the resulting Cloud Run URL and
 redeploy the frontend (e.g. Cloud Run, Firebase Hosting, or Vercel).
 
-## 7. Verifying the setup
+## 8. Verifying the setup
 
 ```bash
 curl http://localhost:8000/health
