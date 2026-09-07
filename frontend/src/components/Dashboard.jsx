@@ -22,6 +22,10 @@ export default function Dashboard({ reports, selectedId, onSelect, overallStatus
 export function SceneRail({ reports, selectedId, onSelect }) {
   return (
     <nav className="scene-rail">
+      <div className="brand-lockup">
+        <img className="brand-logo" src="/logo.png" alt="Script-to-Screen Guardian logo" />
+        <div className="brand-name">SCRIPT TO SCREEN<br />GUARDIAN</div>
+      </div>
       <div className="rail-title">SCENE BINDER</div>
       {reports.length === 0 && (
         <div style={{ padding: "0 20px", fontSize: 13, color: "var(--parchment-dim)" }}>

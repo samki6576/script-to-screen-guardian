@@ -50,6 +50,29 @@ body {
   padding: 24px 0;
 }
 
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px 22px;
+}
+
+.brand-logo {
+  width: 54px;
+  height: 54px;
+  object-fit: contain;
+  flex: 0 0 54px;
+}
+
+.brand-name {
+  color: var(--parchment);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.45;
+}
+
 .rail-title {
   font-size: 13px;
   letter-spacing: 0.02em;
