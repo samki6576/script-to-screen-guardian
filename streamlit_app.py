@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from clickhouse_connect import get_client
 import re
-import json
+import urllib.parse
 
 # ─── Page Configuration ──────────────────────────────────────
 st.set_page_config(
@@ -18,13 +18,16 @@ st.caption("Agentic Production Intelligence | Powered by ClickHouse Cloud")
 @st.cache_resource
 def connect_clickhouse():
     try:
+        # Option 1: Using clickhouse-connect
         client = get_client(
             host="ozi7a3yaeo.asia-southeast1.gcp.clickhouse.cloud",
             port=8443,
             username="default",
             password=".OWvohB3lPC0h",
-            database="default",  # ← Using "default" not "production_db"
-            secure=True
+            database="default",
+            secure=True,
+            connect_timeout=30,
+            send_receive_timeout=30
         )
         
         # Test connection
@@ -34,7 +37,7 @@ def connect_clickhouse():
         return None
         
     except Exception as e:
-        st.error(f"❌ Connection failed: {str(e)[:100]}")
+        st.error(f"❌ Connection failed: {str(e)[:150]}")
         return None
 
 clickhouse = connect_clickhouse()
@@ -45,7 +48,6 @@ with st.sidebar:
     if clickhouse:
         st.success("✅ ClickHouse: Connected")
         st.info("🗄️ Database: default")
-        st.info("📡 Host: ozi7a3yaeo.asia-southeast1.gcp.clickhouse.cloud")
     else:
         st.error("❌ ClickHouse: Disconnected")
         st.info("📊 Using demo data")
@@ -74,7 +76,7 @@ def create_tables():
             ORDER BY (equipment_id, created_at)
         """)
         
-        # Create crew table (SINGULAR: crew_schedule, NOT crew_schedules)
+        # Create crew table
         clickhouse.command("""
             CREATE TABLE IF NOT EXISTS crew_schedule (
                 crew_id UUID DEFAULT generateUUIDv4(),
@@ -88,49 +90,29 @@ def create_tables():
             ORDER BY (crew_id, available_start)
         """)
         
-        # Insert sample equipment
-        clickhouse.command("""
-            INSERT INTO equipment_inventory (equipment_name, type, model, status, location, daily_rate)
-            SELECT 'ARRI Alexa 35', 'Camera', 'Alexa 35', 'available', 'Studio A', 2500.00
-            WHERE NOT EXISTS (SELECT 1 FROM equipment_inventory LIMIT 1)
-        """)
+        # Insert sample data if empty
+        count = clickhouse.query("SELECT count() FROM equipment_inventory")
+        if count.first_row[0] == 0:
+            clickhouse.command("""
+                INSERT INTO equipment_inventory (equipment_name, type, model, status, location, daily_rate)
+                VALUES 
+                ('ARRI Alexa 35', 'Camera', 'Alexa 35', 'available', 'Studio A', 2500.00),
+                ('Sony Venice', 'Camera', 'Venice 2', 'booked', 'Studio B', 2200.00),
+                ('RED Komodo', 'Camera', 'Komodo 6K', 'maintenance', 'Service Center', 1800.00),
+                ('Lighting Kit Pro', 'Lighting', 'Aputure 1200D', 'available', 'Studio A', 800.00),
+                ('Dolly Track', 'Grip', 'Chapman Hybrid', 'available', 'Warehouse', 500.00)
+            """)
         
-        clickhouse.command("""
-            INSERT INTO equipment_inventory (equipment_name, type, model, status, location, daily_rate)
-            SELECT 'Sony Venice', 'Camera', 'Venice 2', 'booked', 'Studio B', 2200.00
-            WHERE NOT EXISTS (SELECT 1 FROM equipment_inventory WHERE equipment_name = 'Sony Venice')
-        """)
-        
-        clickhouse.command("""
-            INSERT INTO equipment_inventory (equipment_name, type, model, status, location, daily_rate)
-            SELECT 'RED Komodo', 'Camera', 'Komodo 6K', 'maintenance', 'Service Center', 1800.00
-            WHERE NOT EXISTS (SELECT 1 FROM equipment_inventory WHERE equipment_name = 'RED Komodo')
-        """)
-        
-        # Insert sample crew (SINGULAR: crew_schedule)
-        clickhouse.command("""
-            INSERT INTO crew_schedule (crew_name, role, available_start, available_end, status)
-            SELECT 'John Director', 'Director', '2026-09-10 08:00:00', '2026-09-10 20:00:00', 'confirmed'
-            WHERE NOT EXISTS (SELECT 1 FROM crew_schedule LIMIT 1)
-        """)
-        
-        clickhouse.command("""
-            INSERT INTO crew_schedule (crew_name, role, available_start, available_end, status)
-            SELECT 'Sarah DP', 'Cinematographer', '2026-09-10 08:00:00', '2026-09-10 20:00:00', 'available'
-            WHERE NOT EXISTS (SELECT 1 FROM crew_schedule WHERE crew_name = 'Sarah DP')
-        """)
-        
-        clickhouse.command("""
-            INSERT INTO crew_schedule (crew_name, role, available_start, available_end, status)
-            SELECT 'Mike Sound', 'Sound Engineer', '2026-09-10 09:00:00', '2026-09-10 18:00:00', 'available'
-            WHERE NOT EXISTS (SELECT 1 FROM crew_schedule WHERE crew_name = 'Mike Sound')
-        """)
-        
-        clickhouse.command("""
-            INSERT INTO crew_schedule (crew_name, role, available_start, available_end, status)
-            SELECT 'Tom Grip', 'Grip', '2026-09-10 07:00:00', '2026-09-10 19:00:00', 'on_leave'
-            WHERE NOT EXISTS (SELECT 1 FROM crew_schedule WHERE crew_name = 'Tom Grip')
-        """)
+        count = clickhouse.query("SELECT count() FROM crew_schedule")
+        if count.first_row[0] == 0:
+            clickhouse.command("""
+                INSERT INTO crew_schedule (crew_name, role, available_start, available_end, status)
+                VALUES 
+                ('John Director', 'Director', '2026-09-10 08:00:00', '2026-09-10 20:00:00', 'confirmed'),
+                ('Sarah DP', 'Cinematographer', '2026-09-10 08:00:00', '2026-09-10 20:00:00', 'available'),
+                ('Mike Sound', 'Sound Engineer', '2026-09-10 09:00:00', '2026-09-10 18:00:00', 'available'),
+                ('Tom Grip', 'Grip', '2026-09-10 07:00:00', '2026-09-10 19:00:00', 'on_leave')
+            """)
         
         return True
     except Exception as e:
@@ -143,13 +125,11 @@ def tables_exist():
         return False
     
     try:
-        # Check equipment table
         eq_check = clickhouse.query("""
             SELECT count() FROM system.tables 
             WHERE database = 'default' AND name = 'equipment_inventory'
         """)
         
-        # Check crew table (SINGULAR)
         crew_check = clickhouse.query("""
             SELECT count() FROM system.tables 
             WHERE database = 'default' AND name = 'crew_schedule'
@@ -168,7 +148,7 @@ if clickhouse and not tables_exist():
         st.success("✅ Tables created with sample data!")
         st.rerun()
 
-# Display data
+# Display data from ClickHouse if connected
 if clickhouse and tables_exist():
     try:
         # ── Query Equipment ──
@@ -186,7 +166,7 @@ if clickhouse and tables_exist():
         else:
             equipment = pd.DataFrame()
         
-        # ── Query Crew (SINGULAR) ──
+        # ── Query Crew ──
         crew_result = clickhouse.query("""
             SELECT crew_name, role, available_start, available_end, status
             FROM crew_schedule
@@ -201,7 +181,7 @@ if clickhouse and tables_exist():
         else:
             crew = pd.DataFrame()
         
-        # ── Display Stats ──
+        # ── Stats ──
         col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
@@ -211,7 +191,7 @@ if clickhouse and tables_exist():
             st.metric("✅ Available", available)
         with col3:
             maintenance = len(equipment[equipment['status'] == 'maintenance']) if not equipment.empty else 0
-            st.metric("🔧 Maintenance", maintenance, "⚠️ Risk" if maintenance > 0 else "✅ Clear")
+            st.metric("🔧 Maintenance", maintenance, "⚠️ Risk" if maintenance > 0 else None)
         with col4:
             st.metric("👥 Crew", len(crew) if not crew.empty else 0)
         with col5:
@@ -242,7 +222,7 @@ if clickhouse and tables_exist():
         with col2:
             st.subheader("👥 Crew")
             if not crew.empty:
-                st.dataframe(crew, use_container_width=True)
+                st.dataframe(crew, width='stretch')
                 st.bar_chart(crew['status'].value_counts())
             else:
                 st.info("No crew data")
@@ -259,15 +239,12 @@ if clickhouse and tables_exist():
         if st.button("🔍 Analyze") and script:
             st.subheader("📋 Analysis")
             
-            # Extract location
             loc_match = re.search(r'(?:INT|EXT)\.\s*([^\n]+)', script)
             location = loc_match.group(1).strip() if loc_match else "Unknown"
             
-            # Extract characters
             chars = re.findall(r'([A-Z][A-Z\s]+)(?=\n)', script)
             characters = [c.strip() for c in chars[:3]] if chars else ["Unknown"]
             
-            # Extract props
             props = []
             if "flashlight" in script.lower():
                 props.append("Flashlight")
@@ -280,7 +257,6 @@ if clickhouse and tables_exist():
             st.write(f"**Characters:** {', '.join(characters)}")
             st.write(f"**Props:** {', '.join(props) if props else 'None detected'}")
             
-            # Check risks
             risks_found = []
             if "rain" in script.lower() or "water" in script.lower():
                 risks_found.append("🌧️ Weather effects required - check rain machine")
@@ -309,6 +285,8 @@ if 'show_demo' in locals() and show_demo:
         {"equipment_name": "ARRI Alexa 35", "type": "Camera", "status": "available", "location": "Studio A", "daily_rate": 2500.00},
         {"equipment_name": "Sony Venice", "type": "Camera", "status": "booked", "location": "Studio B", "daily_rate": 2200.00},
         {"equipment_name": "RED Komodo", "type": "Camera", "status": "maintenance", "location": "Service Center", "daily_rate": 1800.00},
+        {"equipment_name": "Lighting Kit Pro", "type": "Lighting", "status": "available", "location": "Studio A", "daily_rate": 800.00},
+        {"equipment_name": "Dolly Track", "type": "Grip", "status": "available", "location": "Warehouse", "daily_rate": 500.00},
     ])
     
     demo_crew = pd.DataFrame([
@@ -321,10 +299,28 @@ if 'show_demo' in locals() and show_demo:
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("📦 Equipment (Demo)")
-        st.dataframe(demo_equipment, use_container_width=True)
+        st.dataframe(demo_equipment, width='stretch')
+        st.bar_chart(demo_equipment['status'].value_counts())
     with col2:
         st.subheader("👥 Crew (Demo)")
-        st.dataframe(demo_crew, use_container_width=True)
+        st.dataframe(demo_crew, width='stretch')
+        st.bar_chart(demo_crew['status'].value_counts())
 
 st.markdown("---")
 st.caption("🎬 Script-to-Screen Guardian | Built for Agentic Cinema Hackathon")
+
+# ─── Debug Info ──────────────────────────────────────────────
+with st.expander("🔧 Debug Info"):
+    st.write("**ClickHouse Connection Attempt:**")
+    st.write(f"Host: ozi7a3yaeo.asia-southeast1.gcp.clickhouse.cloud")
+    st.write(f"Port: 8443")
+    st.write(f"Username: default")
+    st.write(f"Database: default")
+    st.write(f"Connected: {clickhouse is not None}")
+    
+    if clickhouse:
+        try:
+            version = clickhouse.query("SELECT version()")
+            st.success(f"Version: {version.first_row[0]}")
+        except Exception as e:
+            st.error(f"Version check failed: {e}")
