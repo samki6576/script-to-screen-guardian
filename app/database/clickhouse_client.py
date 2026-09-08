@@ -7,12 +7,14 @@ with both self-hosted and ClickHouse Cloud instances.
 
 from __future__ import annotations
 import logging
-from functools import lru_cache
+import threading
 import clickhouse_connect
 
 from app.config import get_settings
 
 logger = logging.getLogger("clickhouse_client")
+
+_thread_local = threading.local()
 
 
 class ClickHouseClient:
@@ -76,6 +78,9 @@ class ClickHouseClient:
         )
 
 
-@lru_cache()
 def get_clickhouse_client() -> ClickHouseClient:
-    return ClickHouseClient()
+    client = getattr(_thread_local, "client", None)
+    if client is None:
+        client = ClickHouseClient()
+        _thread_local.client = client
+    return client

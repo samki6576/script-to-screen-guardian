@@ -22,7 +22,6 @@ def _secret_or_env(name: str, default: str = "") -> str:
     return str(value)
 
 
-@st.cache_resource
 def connect_clickhouse():
     try:
         client = get_client(
@@ -33,18 +32,29 @@ def connect_clickhouse():
             database=_secret_or_env("CLICKHOUSE_DATABASE", "default"),
             secure=_secret_or_env("CLICKHOUSE_SECURE", "false").lower() == "true",
             connect_timeout=30,
-            send_receive_timeout=30
+            send_receive_timeout=30,
         )
-        
-        # Test connection
+
         result = client.query("SELECT 1")
-        if result.first_row[0] == 1:
+        if result.first_row and result.first_row[0] == 1:
             return client
+        client.close()
         return None
-        
     except Exception as e:
         st.error("❌ Connection failed. Check the ClickHouse values in Streamlit Secrets.")
         return None
+
+
+def can_connect_clickhouse() -> bool:
+    client = connect_clickhouse()
+    if client is None:
+        return False
+    try:
+        result = client.query("SELECT 1")
+        return bool(result.first_row and result.first_row[0] == 1)
+    finally:
+        client.close()
+
 
 clickhouse = connect_clickhouse()
 
@@ -63,12 +73,12 @@ with st.sidebar:
 
 # ─── Create Tables Function ──────────────────────────────────
 def create_tables():
-    if not clickhouse:
+    client = connect_clickhouse()
+    if not client:
         return False
-    
+
     try:
-        # Create equipment table
-        clickhouse.command("""
+        client.command("""
             CREATE TABLE IF NOT EXISTS equipment_inventory (
                 equipment_id UUID DEFAULT generateUUIDv4(),
                 equipment_name String,
@@ -81,9 +91,8 @@ def create_tables():
             ) ENGINE = MergeTree()
             ORDER BY (equipment_id, created_at)
         """)
-        
-        # Create crew table
-        clickhouse.command("""
+
+        client.command("""
             CREATE TABLE IF NOT EXISTS crew_schedule (
                 crew_id UUID DEFAULT generateUUIDv4(),
                 crew_name String,
@@ -95,11 +104,10 @@ def create_tables():
             ) ENGINE = MergeTree()
             ORDER BY (crew_id, available_start)
         """)
-        
-        # Insert sample data if empty
-        count = clickhouse.query("SELECT count() FROM equipment_inventory")
-        if count.first_row[0] == 0:
-            clickhouse.command("""
+
+        count = client.query("SELECT count() FROM equipment_inventory")
+        if count.first_row and count.first_row[0] == 0:
+            client.command("""
                 INSERT INTO equipment_inventory (equipment_name, type, model, status, location, daily_rate)
                 VALUES 
                 ('ARRI Alexa 35', 'Camera', 'Alexa 35', 'available', 'Studio A', 2500.00),
@@ -108,10 +116,10 @@ def create_tables():
                 ('Lighting Kit Pro', 'Lighting', 'Aputure 1200D', 'available', 'Studio A', 800.00),
                 ('Dolly Track', 'Grip', 'Chapman Hybrid', 'available', 'Warehouse', 500.00)
             """)
-        
-        count = clickhouse.query("SELECT count() FROM crew_schedule")
-        if count.first_row[0] == 0:
-            clickhouse.command("""
+
+        count = client.query("SELECT count() FROM crew_schedule")
+        if count.first_row and count.first_row[0] == 0:
+            client.command("""
                 INSERT INTO crew_schedule (crew_name, role, available_start, available_end, status)
                 VALUES 
                 ('John Director', 'Director', '2026-09-10 08:00:00', '2026-09-10 20:00:00', 'confirmed'),
@@ -119,31 +127,36 @@ def create_tables():
                 ('Mike Sound', 'Sound Engineer', '2026-09-10 09:00:00', '2026-09-10 18:00:00', 'available'),
                 ('Tom Grip', 'Grip', '2026-09-10 07:00:00', '2026-09-10 19:00:00', 'on_leave')
             """)
-        
+
         return True
     except Exception as e:
         st.error(f"Error creating tables: {e}")
         return False
+    finally:
+        client.close()
 
 # ─── Check Tables ────────────────────────────────────────────
 def tables_exist():
-    if not clickhouse:
+    client = connect_clickhouse()
+    if not client:
         return False
-    
+
     try:
-        eq_check = clickhouse.query("""
+        eq_check = client.query("""
             SELECT count() FROM system.tables 
             WHERE database = 'default' AND name = 'equipment_inventory'
         """)
-        
-        crew_check = clickhouse.query("""
+
+        crew_check = client.query("""
             SELECT count() FROM system.tables 
             WHERE database = 'default' AND name = 'crew_schedule'
         """)
-        
-        return eq_check.first_row[0] > 0 and crew_check.first_row[0] > 0
-    except:
+
+        return bool(eq_check.first_row and crew_check.first_row and eq_check.first_row[0] > 0 and crew_check.first_row[0] > 0)
+    except Exception:
         return False
+    finally:
+        client.close()
 
 # ─── Main Content ────────────────────────────────────────────
 
