@@ -1,11 +1,8 @@
 import streamlit as st
 import pandas as pd
-import os
 from clickhouse_connect import get_client
-import google.generativeai as genai
-import json
 import re
-from datetime import datetime, timedelta
+import json
 
 # ─── Page Configuration ──────────────────────────────────────
 st.set_page_config(
@@ -15,18 +12,7 @@ st.set_page_config(
 )
 
 st.title("🎬 Script-to-Screen Guardian")
-st.caption("Agentic Production Intelligence | Powered by ClickHouse Cloud + Gemini AI")
-
-# ─── Get Secrets ──────────────────────────────────────────────
-def get_secret(key, default=None):
-    """Get secret from environment or Streamlit secrets"""
-    value = os.getenv(key)
-    if value:
-        return value
-    try:
-        return st.secrets.get(key, default)
-    except:
-        return default
+st.caption("Agentic Production Intelligence | Powered by ClickHouse Cloud")
 
 # ─── Connect to ClickHouse ────────────────────────────────────
 @st.cache_resource
@@ -37,67 +23,122 @@ def connect_clickhouse():
             port=8443,
             username="default",
             password=".OWvohB3lPC0h",
-            database="default",  # ← Using default database
+            database="default",  # ← Using "default" not "production_db"
             secure=True
         )
         
         # Test connection
         result = client.query("SELECT 1")
         if result.first_row[0] == 1:
-            st.success("✅ Connected to ClickHouse Cloud!")
             return client
-        else:
-            st.error("❌ Connection test failed")
-            return None
+        return None
         
     except Exception as e:
-        st.error(f"❌ ClickHouse connection failed: {str(e)[:150]}")
+        st.error(f"❌ Connection failed: {str(e)[:100]}")
         return None
 
-# ─── Connect to Gemini ────────────────────────────────────────
-@st.cache_resource
-def setup_gemini():
-    try:
-        api_key = get_secret('GEMINI_API_KEY')
-        if not api_key:
-            # Hardcode for testing if you have a key
-            api_key = "YOUR_GEMINI_API_KEY_HERE"
-        
-        if api_key and api_key != "YOUR_GEMINI_API_KEY_HERE":
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-2.5-flash-lite')
-            return model
-        else:
-            st.warning("⚠️ Gemini API key not set. Using fallback mode.")
-            return None
-    except Exception as e:
-        st.warning(f"⚠️ Gemini setup failed: {e}")
-        return None
-
-# ─── Initialize Connections ───────────────────────────────────
 clickhouse = connect_clickhouse()
-gemini = setup_gemini()
 
-# ─── Sidebar Status ──────────────────────────────────────────
+# ─── Sidebar ──────────────────────────────────────────────────
 with st.sidebar:
     st.title("📋 System Status")
-    
     if clickhouse:
         st.success("✅ ClickHouse: Connected")
         st.info("🗄️ Database: default")
+        st.info("📡 Host: ozi7a3yaeo.asia-southeast1.gcp.clickhouse.cloud")
     else:
         st.error("❌ ClickHouse: Disconnected")
-    
-    if gemini:
-        st.success("✅ Gemini: Configured")
-    else:
-        st.warning("⚠️ Gemini: Fallback mode")
+        st.info("📊 Using demo data")
     
     st.markdown("---")
     st.caption("Built for Agentic Cinema Hackathon")
 
-# ─── Check Tables Exist ──────────────────────────────────────
-def check_tables():
+# ─── Create Tables Function ──────────────────────────────────
+def create_tables():
+    if not clickhouse:
+        return False
+    
+    try:
+        # Create equipment table
+        clickhouse.command("""
+            CREATE TABLE IF NOT EXISTS equipment_inventory (
+                equipment_id UUID DEFAULT generateUUIDv4(),
+                equipment_name String,
+                type String,
+                model String,
+                status String,
+                location String,
+                daily_rate Decimal(10,2),
+                created_at DateTime DEFAULT now()
+            ) ENGINE = MergeTree()
+            ORDER BY (equipment_id, created_at)
+        """)
+        
+        # Create crew table (SINGULAR: crew_schedule, NOT crew_schedules)
+        clickhouse.command("""
+            CREATE TABLE IF NOT EXISTS crew_schedule (
+                crew_id UUID DEFAULT generateUUIDv4(),
+                crew_name String,
+                role String,
+                available_start DateTime,
+                available_end DateTime,
+                status String,
+                created_at DateTime DEFAULT now()
+            ) ENGINE = MergeTree()
+            ORDER BY (crew_id, available_start)
+        """)
+        
+        # Insert sample equipment
+        clickhouse.command("""
+            INSERT INTO equipment_inventory (equipment_name, type, model, status, location, daily_rate)
+            SELECT 'ARRI Alexa 35', 'Camera', 'Alexa 35', 'available', 'Studio A', 2500.00
+            WHERE NOT EXISTS (SELECT 1 FROM equipment_inventory LIMIT 1)
+        """)
+        
+        clickhouse.command("""
+            INSERT INTO equipment_inventory (equipment_name, type, model, status, location, daily_rate)
+            SELECT 'Sony Venice', 'Camera', 'Venice 2', 'booked', 'Studio B', 2200.00
+            WHERE NOT EXISTS (SELECT 1 FROM equipment_inventory WHERE equipment_name = 'Sony Venice')
+        """)
+        
+        clickhouse.command("""
+            INSERT INTO equipment_inventory (equipment_name, type, model, status, location, daily_rate)
+            SELECT 'RED Komodo', 'Camera', 'Komodo 6K', 'maintenance', 'Service Center', 1800.00
+            WHERE NOT EXISTS (SELECT 1 FROM equipment_inventory WHERE equipment_name = 'RED Komodo')
+        """)
+        
+        # Insert sample crew (SINGULAR: crew_schedule)
+        clickhouse.command("""
+            INSERT INTO crew_schedule (crew_name, role, available_start, available_end, status)
+            SELECT 'John Director', 'Director', '2026-09-10 08:00:00', '2026-09-10 20:00:00', 'confirmed'
+            WHERE NOT EXISTS (SELECT 1 FROM crew_schedule LIMIT 1)
+        """)
+        
+        clickhouse.command("""
+            INSERT INTO crew_schedule (crew_name, role, available_start, available_end, status)
+            SELECT 'Sarah DP', 'Cinematographer', '2026-09-10 08:00:00', '2026-09-10 20:00:00', 'available'
+            WHERE NOT EXISTS (SELECT 1 FROM crew_schedule WHERE crew_name = 'Sarah DP')
+        """)
+        
+        clickhouse.command("""
+            INSERT INTO crew_schedule (crew_name, role, available_start, available_end, status)
+            SELECT 'Mike Sound', 'Sound Engineer', '2026-09-10 09:00:00', '2026-09-10 18:00:00', 'available'
+            WHERE NOT EXISTS (SELECT 1 FROM crew_schedule WHERE crew_name = 'Mike Sound')
+        """)
+        
+        clickhouse.command("""
+            INSERT INTO crew_schedule (crew_name, role, available_start, available_end, status)
+            SELECT 'Tom Grip', 'Grip', '2026-09-10 07:00:00', '2026-09-10 19:00:00', 'on_leave'
+            WHERE NOT EXISTS (SELECT 1 FROM crew_schedule WHERE crew_name = 'Tom Grip')
+        """)
+        
+        return True
+    except Exception as e:
+        st.error(f"Error creating tables: {e}")
+        return False
+
+# ─── Check Tables ────────────────────────────────────────────
+def tables_exist():
     if not clickhouse:
         return False
     
@@ -108,41 +149,31 @@ def check_tables():
             WHERE database = 'default' AND name = 'equipment_inventory'
         """)
         
-        if eq_check.first_row[0] == 0:
-            st.warning("⚠️ Table 'equipment_inventory' does not exist. Please create it.")
-            return False
-        
-        # Check crew table
+        # Check crew table (SINGULAR)
         crew_check = clickhouse.query("""
             SELECT count() FROM system.tables 
             WHERE database = 'default' AND name = 'crew_schedule'
         """)
         
-        if crew_check.first_row[0] == 0:
-            st.warning("⚠️ Table 'crew_schedule' does not exist. Please create it.")
-            return False
-        
-        return True
-    except Exception as e:
-        st.error(f"Error checking tables: {e}")
+        return eq_check.first_row[0] > 0 and crew_check.first_row[0] > 0
+    except:
         return False
 
-# ─── Main Dashboard ──────────────────────────────────────────
+# ─── Main Content ────────────────────────────────────────────
 
-# Check if tables exist
-tables_exist = check_tables()
+# Check if tables exist, create if not
+if clickhouse and not tables_exist():
+    st.info("📝 Setting up tables...")
+    if create_tables():
+        st.success("✅ Tables created with sample data!")
+        st.rerun()
 
-if clickhouse and tables_exist:
+# Display data
+if clickhouse and tables_exist():
     try:
         # ── Query Equipment ──
         eq_result = clickhouse.query("""
-            SELECT 
-                equipment_name,
-                type,
-                model,
-                status,
-                location,
-                daily_rate
+            SELECT equipment_name, type, model, status, location, daily_rate
             FROM equipment_inventory
             ORDER BY equipment_name
         """)
@@ -154,16 +185,10 @@ if clickhouse and tables_exist:
             )
         else:
             equipment = pd.DataFrame()
-            st.info("ℹ️ No equipment data. Run INSERT statements.")
         
-        # ── Query Crew ──
+        # ── Query Crew (SINGULAR) ──
         crew_result = clickhouse.query("""
-            SELECT 
-                crew_name,
-                role,
-                available_start,
-                available_end,
-                status
+            SELECT crew_name, role, available_start, available_end, status
             FROM crew_schedule
             ORDER BY crew_name
         """)
@@ -175,31 +200,23 @@ if clickhouse and tables_exist:
             )
         else:
             crew = pd.DataFrame()
-            st.info("ℹ️ No crew data. Run INSERT statements.")
         
         # ── Display Stats ──
         col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
-            total_eq = len(equipment) if not equipment.empty else 0
-            st.metric("🎥 Total Equipment", total_eq)
-        
+            st.metric("🎥 Equipment", len(equipment) if not equipment.empty else 0)
         with col2:
-            available_eq = len(equipment[equipment['status'] == 'available']) if not equipment.empty else 0
-            st.metric("✅ Available", available_eq)
-        
+            available = len(equipment[equipment['status'] == 'available']) if not equipment.empty else 0
+            st.metric("✅ Available", available)
         with col3:
-            maintenance_eq = len(equipment[equipment['status'] == 'maintenance']) if not equipment.empty else 0
-            st.metric("🔧 Maintenance", maintenance_eq, 
-                     delta="⚠️ Risk" if maintenance_eq > 0 else "✅ Clear")
-        
+            maintenance = len(equipment[equipment['status'] == 'maintenance']) if not equipment.empty else 0
+            st.metric("🔧 Maintenance", maintenance, "⚠️ Risk" if maintenance > 0 else "✅ Clear")
         with col4:
-            total_crew = len(crew) if not crew.empty else 0
-            st.metric("👥 Total Crew", total_crew)
-        
+            st.metric("👥 Crew", len(crew) if not crew.empty else 0)
         with col5:
-            available_crew = len(crew[crew['status'].isin(['available', 'confirmed'])]) if not crew.empty else 0
-            st.metric("🟢 Available Crew", available_crew)
+            avail_crew = len(crew[crew['status'].isin(['available', 'confirmed'])]) if not crew.empty else 0
+            st.metric("🟢 Available", avail_crew)
         
         # ── Risk Alerts ──
         if not equipment.empty:
@@ -209,74 +226,74 @@ if clickhouse and tables_exist:
                 for _, row in risks.iterrows():
                     st.warning(f"🚨 **{row['equipment_name']}** - {row['status']} at {row.get('location', 'Unknown')}")
             else:
-                st.success("✅ No equipment risks detected!")
+                st.success("✅ No equipment risks!")
         
-        # ── Two Column Layout ──
+        # ── Tables ──
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("📦 Equipment Inventory")
+            st.subheader("📦 Equipment")
             if not equipment.empty:
                 st.dataframe(equipment, use_container_width=True)
-                status_counts = equipment['status'].value_counts()
-                st.bar_chart(status_counts)
+                st.bar_chart(equipment['status'].value_counts())
             else:
                 st.info("No equipment data")
         
         with col2:
-            st.subheader("👥 Crew Schedule")
+            st.subheader("👥 Crew")
             if not crew.empty:
                 st.dataframe(crew, use_container_width=True)
-                status_counts = crew['status'].value_counts()
-                st.bar_chart(status_counts)
+                st.bar_chart(crew['status'].value_counts())
             else:
                 st.info("No crew data")
         
-        # ── Gemini Script Analysis (Optional) ──
+        # ── Script Analysis ──
         st.subheader("🎭 Script Analysis")
         
-        sample_script = st.text_area(
-            "Paste a script scene to analyze:",
-            height=150,
+        script = st.text_area(
+            "Paste a script scene:",
+            height=100,
             placeholder="SCENE 12 - EXT. ABANDONED WAREHOUSE - DAY\n\nJACK and SARAH enter..."
         )
         
-        if st.button("🔍 Analyze Scene") and sample_script:
-            with st.spinner("Analyzing with Gemini..."):
-                if gemini:
-                    try:
-                        prompt = f"""
-                        Analyze this film script scene and extract:
-                        1. Location
-                        2. Characters
-                        3. Props needed
-                        4. Special effects/requirements
-                        5. Potential production risks
-
-                        Script:
-                        {sample_script}
-
-                        Return as JSON with keys: location, characters, props, requirements, risks
-                        """
-                        
-                        response = gemini.generate_content(prompt)
-                        st.success("✅ Analysis complete!")
-                        
-                        try:
-                            # Try to parse as JSON
-                            result = json.loads(response.text)
-                            st.json(result)
-                        except:
-                            # Show raw response
-                            st.write(response.text)
-                    except Exception as e:
-                        st.error(f"Gemini analysis failed: {e}")
-                        st.info("Using fallback analysis...")
-                        show_fallback_analysis(sample_script)
-                else:
-                    st.info("Gemini not configured. Using fallback analysis.")
-                    show_fallback_analysis(sample_script)
+        if st.button("🔍 Analyze") and script:
+            st.subheader("📋 Analysis")
             
+            # Extract location
+            loc_match = re.search(r'(?:INT|EXT)\.\s*([^\n]+)', script)
+            location = loc_match.group(1).strip() if loc_match else "Unknown"
+            
+            # Extract characters
+            chars = re.findall(r'([A-Z][A-Z\s]+)(?=\n)', script)
+            characters = [c.strip() for c in chars[:3]] if chars else ["Unknown"]
+            
+            # Extract props
+            props = []
+            if "flashlight" in script.lower():
+                props.append("Flashlight")
+            if "device" in script.lower():
+                props.append("Device")
+            if "rain" in script.lower() or "water" in script.lower():
+                props.append("Rain effect")
+            
+            st.write(f"**Location:** {location}")
+            st.write(f"**Characters:** {', '.join(characters)}")
+            st.write(f"**Props:** {', '.join(props) if props else 'None detected'}")
+            
+            # Check risks
+            risks_found = []
+            if "rain" in script.lower() or "water" in script.lower():
+                risks_found.append("🌧️ Weather effects required - check rain machine")
+            if "crash" in script.lower() or "explosion" in script.lower():
+                risks_found.append("💥 Special effects - permit needed")
+            
+            if risks_found:
+                st.warning("⚠️ **Risks Identified:**")
+                for r in risks_found:
+                    st.write(f"• {r}")
+            else:
+                st.success("✅ No immediate risks")
+        
     except Exception as e:
         st.error(f"Error: {e}")
         show_demo = True
@@ -284,54 +301,14 @@ if clickhouse and tables_exist:
 else:
     show_demo = True
 
-# ─── Fallback Analysis ──────────────────────────────────────
-def show_fallback_analysis(script):
-    """Show fallback analysis when Gemini is unavailable"""
-    st.subheader("📋 Fallback Analysis")
-    
-    # Simple extraction
-    location_match = re.search(r'(?:INT|EXT)\.\s*([^\n]+)', script)
-    location = location_match.group(1).strip() if location_match else "Unknown"
-    
-    char_match = re.findall(r'([A-Z][A-Z\s]+)(?=\n)', script)
-    characters = [c.strip() for c in char_match[:3]] if char_match else ["Unknown"]
-    
-    props = []
-    if "flashlight" in script.lower():
-        props.append("Flashlight")
-    if "device" in script.lower():
-        props.append("Device")
-    if "rain" in script.lower() or "water" in script.lower():
-        props.append("Rain effect")
-    
-    st.write(f"**Location:** {location}")
-    st.write(f"**Characters:** {', '.join(characters)}")
-    st.write(f"**Props:** {', '.join(props) if props else 'None detected'}")
-    
-    # Check for risks
-    risks = []
-    if "rain" in script.lower() or "water" in script.lower():
-        risks.append("🌧️ Weather effects required - check rain machine availability")
-    if "crash" in script.lower() or "explosion" in script.lower():
-        risks.append("💥 Special effects required - permit needed")
-    
-    if risks:
-        st.warning("⚠️ **Potential Risks Identified:**")
-        for risk in risks:
-            st.write(f"• {risk}")
-    else:
-        st.success("✅ No immediate risks detected")
-
-# ─── Demo Data Fallback ──────────────────────────────────────
+# ─── Demo Data ──────────────────────────────────────────────
 if 'show_demo' in locals() and show_demo:
-    st.info("📊 Showing demo data")
+    st.info("📊 Demo Data (ClickHouse not connected)")
     
     demo_equipment = pd.DataFrame([
         {"equipment_name": "ARRI Alexa 35", "type": "Camera", "status": "available", "location": "Studio A", "daily_rate": 2500.00},
         {"equipment_name": "Sony Venice", "type": "Camera", "status": "booked", "location": "Studio B", "daily_rate": 2200.00},
         {"equipment_name": "RED Komodo", "type": "Camera", "status": "maintenance", "location": "Service Center", "daily_rate": 1800.00},
-        {"equipment_name": "Lighting Kit Pro", "type": "Lighting", "status": "available", "location": "Studio A", "daily_rate": 800.00},
-        {"equipment_name": "Dolly Track", "type": "Grip", "status": "available", "location": "Warehouse", "daily_rate": 500.00},
     ])
     
     demo_crew = pd.DataFrame([
@@ -345,78 +322,9 @@ if 'show_demo' in locals() and show_demo:
     with col1:
         st.subheader("📦 Equipment (Demo)")
         st.dataframe(demo_equipment, use_container_width=True)
-        
-        # Demo chart
-        status_counts = demo_equipment['status'].value_counts()
-        st.bar_chart(status_counts)
-    
     with col2:
         st.subheader("👥 Crew (Demo)")
         st.dataframe(demo_crew, use_container_width=True)
-        
-        # Demo chart
-        status_counts = demo_crew['status'].value_counts()
-        st.bar_chart(status_counts)
 
-# ─── Footer ──────────────────────────────────────────────────
 st.markdown("---")
 st.caption("🎬 Script-to-Screen Guardian | Built for Agentic Cinema Hackathon")
-st.caption(f"📡 ClickHouse: ozi7a3yaeo.asia-southeast1.gcp.clickhouse.cloud")
-
-# ─── Create Tables Button ────────────────────────────────────
-if clickhouse and not tables_exist:
-    st.info("📝 Tables not found. Click below to create them.")
-    
-    if st.button("🛠️ Create Tables"):
-        try:
-            clickhouse.command("""
-                CREATE TABLE IF NOT EXISTS equipment_inventory (
-                    equipment_id UUID DEFAULT generateUUIDv4(),
-                    equipment_name String,
-                    type String,
-                    model String,
-                    status String,
-                    location String,
-                    daily_rate Decimal(10,2),
-                    created_at DateTime DEFAULT now()
-                ) ENGINE = MergeTree()
-                ORDER BY (equipment_id, created_at)
-            """)
-            
-            clickhouse.command("""
-                CREATE TABLE IF NOT EXISTS crew_schedule (
-                    crew_id UUID DEFAULT generateUUIDv4(),
-                    crew_name String,
-                    role String,
-                    available_start DateTime,
-                    available_end DateTime,
-                    status String,
-                    created_at DateTime DEFAULT now()
-                ) ENGINE = MergeTree()
-                ORDER BY (crew_id, available_start)
-            """)
-            
-            clickhouse.command("""
-                INSERT INTO equipment_inventory (equipment_name, type, model, status, location, daily_rate)
-                VALUES 
-                ('ARRI Alexa 35', 'Camera', 'Alexa 35', 'available', 'Studio A', 2500.00),
-                ('Sony Venice', 'Camera', 'Venice 2', 'booked', 'Studio B', 2200.00),
-                ('RED Komodo', 'Camera', 'Komodo 6K', 'maintenance', 'Service Center', 1800.00),
-                ('Lighting Kit Pro', 'Lighting', 'Aputure 1200D', 'available', 'Studio A', 800.00),
-                ('Dolly Track', 'Grip', 'Chapman Hybrid', 'available', 'Warehouse', 500.00)
-            """)
-            
-            clickhouse.command("""
-                INSERT INTO crew_schedule (crew_name, role, available_start, available_end, status)
-                VALUES 
-                ('John Director', 'Director', '2026-09-10 08:00:00', '2026-09-10 20:00:00', 'confirmed'),
-                ('Sarah DP', 'Cinematographer', '2026-09-10 08:00:00', '2026-09-10 20:00:00', 'available'),
-                ('Mike Sound', 'Sound Engineer', '2026-09-10 09:00:00', '2026-09-10 18:00:00', 'available'),
-                ('Tom Grip', 'Grip', '2026-09-10 07:00:00', '2026-09-10 19:00:00', 'on_leave')
-            """)
-            
-            st.success("✅ Tables created and data inserted! Refresh the page.")
-            st.rerun()
-            
-        except Exception as e:
-            st.error(f"Error creating tables: {e}")
