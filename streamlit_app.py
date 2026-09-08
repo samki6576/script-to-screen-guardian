@@ -234,7 +234,7 @@ if clickhouse and tables_exist():
         with col1:
             st.subheader("📦 Equipment")
             if not equipment.empty:
-                st.dataframe(equipment, use_container_width=True)
+                st.dataframe(equipment, width='stretch')
                 st.bar_chart(equipment['status'].value_counts())
             else:
                 st.info("No equipment data")
