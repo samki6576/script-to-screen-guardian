@@ -235,10 +235,22 @@ if clickhouse and tables_exist():
         
         # ── Script Analysis ──
         st.subheader("🎭 Script Analysis")
+
+        uploaded_file = st.file_uploader(
+            "Upload a script file:",
+            type=["txt", "fdx", "md"],
+            help="Upload a plain-text, Fountain, or Final Draft script file.",
+        )
+        uploaded_script = (
+            uploaded_file.getvalue().decode("utf-8", errors="replace")
+            if uploaded_file is not None
+            else ""
+        )
         
         script = st.text_area(
             "Paste a script scene:",
             height=100,
+            value=uploaded_script,
             placeholder="SCENE 12 - EXT. ABANDONED WAREHOUSE - DAY\n\nJACK and SARAH enter..."
         )
         
