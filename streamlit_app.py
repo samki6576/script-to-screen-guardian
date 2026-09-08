@@ -1,3 +1,5 @@
+import os
+
 import streamlit as st
 import pandas as pd
 from clickhouse_connect import get_client
@@ -15,17 +17,21 @@ st.title("🎬 Script-to-Screen Guardian")
 st.caption("Agentic Production Intelligence | Powered by ClickHouse Cloud")
 
 # ─── Connect to ClickHouse ────────────────────────────────────
+def _secret_or_env(name: str, default: str = "") -> str:
+    value = st.secrets.get(name, os.getenv(name, default))
+    return str(value)
+
+
 @st.cache_resource
 def connect_clickhouse():
     try:
-        # Option 1: Using clickhouse-connect
         client = get_client(
-            host="ozi7a3yaeo.asia-southeast1.gcp.clickhouse.cloud",
-            port=8443,
-            username="default",
-            password=".OWvohB3lPC0h",
-            database="default",
-            secure=True,
+            host=_secret_or_env("CLICKHOUSE_HOST", "localhost"),
+            port=int(_secret_or_env("CLICKHOUSE_PORT", "8123")),
+            username=_secret_or_env("CLICKHOUSE_USER", "default"),
+            password=_secret_or_env("CLICKHOUSE_PASSWORD"),
+            database=_secret_or_env("CLICKHOUSE_DATABASE", "default"),
+            secure=_secret_or_env("CLICKHOUSE_SECURE", "false").lower() == "true",
             connect_timeout=30,
             send_receive_timeout=30
         )
@@ -37,7 +43,7 @@ def connect_clickhouse():
         return None
         
     except Exception as e:
-        st.error(f"❌ Connection failed: {str(e)[:150]}")
+        st.error("❌ Connection failed. Check the ClickHouse values in Streamlit Secrets.")
         return None
 
 clickhouse = connect_clickhouse()
@@ -312,10 +318,10 @@ st.caption("🎬 Script-to-Screen Guardian | Built for Agentic Cinema Hackathon"
 # ─── Debug Info ──────────────────────────────────────────────
 with st.expander("🔧 Debug Info"):
     st.write("**ClickHouse Connection Attempt:**")
-    st.write(f"Host: ozi7a3yaeo.asia-southeast1.gcp.clickhouse.cloud")
-    st.write(f"Port: 8443")
-    st.write(f"Username: default")
-    st.write(f"Database: default")
+    st.write(f"Host: {_secret_or_env('CLICKHOUSE_HOST', 'localhost')}")
+    st.write(f"Port: {_secret_or_env('CLICKHOUSE_PORT', '8123')}")
+    st.write(f"Username: {_secret_or_env('CLICKHOUSE_USER', 'default')}")
+    st.write(f"Database: {_secret_or_env('CLICKHOUSE_DATABASE', 'default')}")
     st.write(f"Connected: {clickhouse is not None}")
     
     if clickhouse:
